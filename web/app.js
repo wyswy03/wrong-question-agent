@@ -3,6 +3,8 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 let notebookId = "";
 let imageData = "";
+let lastSavedId = "";
+let ingestBusy = false;
 let stream = null;
 let bankItems = [];
 let quizQueue = [];
@@ -193,6 +195,7 @@ async function saveItem(extra) {
     .split(/[,，]/)
     .map((x) => x.trim())
     .filter(Boolean);
+  extra = extra || {};
   const stem = String((extra && extra.stem) || fd.get("stem") || "").trim();
   const payload = {
     subject: (extra && extra.subject) || fd.get("subject"),
@@ -206,6 +209,9 @@ async function saveItem(extra) {
     tags,
     imageData: extra && extra.imageData != null ? extra.imageData : imageData,
   };
+  if (extra.updateExisting && lastSavedId) {
+    payload.id = lastSavedId;
+  }
   if (!payload.imageData && payload.stem === "看图") {
     throw new Error("请先拍照或选一张图片");
   }
@@ -222,7 +228,14 @@ async function saveItem(extra) {
   }
   video.hidden = true;
   renderStats(data.stats);
+  if (data.item && data.item.id) lastSavedId = data.item.id;
+  setSubmitLabel(lastSavedId ? "更新本题" : "放入错题库");
   return data;
+}
+
+function setSubmitLabel(text) {
+  const btn = $("#form") && $("#form").querySelector("button[type=\"submit\"]");
+  if (btn) btn.textContent = text;
 }
 
 function fillFormFromOcr(fields) {
@@ -249,6 +262,10 @@ async function recognizePhoto(dataUrl) {
 }
 
 async function ingestPhotoFile(file, autoSave) {
+  if (ingestBusy) return;
+  ingestBusy = true;
+  lastSavedId = "";
+  try {
   imageData = await compressFile(file);
   preview.src = imageData;
   preview.hidden = false;
@@ -275,7 +292,10 @@ async function ingestPhotoFile(file, autoSave) {
     showSaveOk("识别暂时不可用，已按图片入库。");
   }
   await saveItem(extra);
-  showSaveOk("已入库。识别结果在下方表单，可改完再到题库核对。");
+  showSaveOk("已入库（只需这一次）。下面表单改完请点「更新本题」，不会再多出一条。");
+  } finally {
+    ingestBusy = false;
+  }
 }
 
 async function startCamera() {
@@ -317,9 +337,10 @@ $("#btnSnap").addEventListener("click", async () => {
   preview.src = imageData;
   preview.hidden = false;
   video.hidden = true;
+  lastSavedId = "";
   try {
     await saveItem({ imageData, stem: "看图" });
-    showSaveOk("已拍照入库。到「题库」可看到这张图，练习时看图作答。");
+    showSaveOk("已拍照入库。改文字请点「更新本题」，不要再点成新增。");
   } catch (err) {
     alert(err.message);
   }
@@ -350,9 +371,12 @@ $("#fileAlbum").addEventListener("change", async (ev) => {
 $("#form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
-    await saveItem();
+    await saveItem({ updateExisting: Boolean(lastSavedId) });
     ev.target.reset();
-    showSaveOk("已放入错题库，可到「题库」查看或「练习」开始。");
+    lastSavedId = "";
+    imageData = "";
+    setSubmitLabel("放入错题库");
+    showSaveOk("已保存到题库（同一题不会重复新增）。");
   } catch (err) {
     alert(err.message);
   }
