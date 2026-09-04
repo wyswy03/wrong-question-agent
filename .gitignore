@@ -1,0 +1,10 @@
+data/bank.json
+data/bank.json.tmp
+data/images/*
+!data/images/.gitkeep
+data/inbox/*
+!data/inbox/.gitkeep
+data/notebooks/
+__pycache__/
+*.pyc
+.DS_Store
