@@ -48,9 +48,22 @@ def _recognize_with(action: str, image_b64: str) -> list[str]:
     return _lines_from_resp(resp)
 
 
+def question_only(text):
+    s = (text or '').strip()
+    s = re.sub(r'\$\$[\s\S]*?\$\$', ' ', s)
+    s = re.sub(r'\$[^$]*\$', ' ', s)
+    s = re.split(r'\sX\s|×|✘|→|->', s, maxsplit=1)[0]
+    s = re.split(r'应为|正确答案|正确\s*[:：]|因数拆错|配方公式|用错', s, maxsplit=1)[0]
+    s = re.sub(r'\s+', ' ', s).strip()
+    m = re.match(r'(\d+\s*[.、．]\s*.{0,120}?=\s*0)', s)
+    if m:
+        s = m.group(1).strip()
+    return s
+
+
 def parse_fields(lines: list[str]) -> dict:
     text = "\n".join(lines)
-    stem = text.strip()
+    stem = question_only(text) or text.strip()
     correct = ""
     wrong = ""
     explanation = ""

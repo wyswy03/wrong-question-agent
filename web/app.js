@@ -129,7 +129,7 @@ function renderList() {
         : `<div class="thumb-empty">无图</div>`}
       <div>
         <p class="meta">${escapeHtml(it.subject || "未分类")} · ${escapeHtml(it.source || "未注明来源")} · 错${it.wrongCount || 0}/对${it.correctCount || 0}</p>
-        <p class="stem">${escapeHtml(it.stem || "（无题干）")}</p>
+        <p class="stem">${escapeHtml(practiceStem(it))}</p>
         <div class="tags">
           ${(it.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("")}
           ${it.knowledge ? `<span class="tag">${escapeHtml(it.knowledge)}</span>` : ""}
@@ -373,6 +373,19 @@ $("#btnQuiz").addEventListener("click", async () => {
   renderQuiz();
 });
 
+function practiceStem(item) {
+  let s = String((item && item.stem) || "");
+  s = s.replace(/\$\$[\s\S]*?\$\$/g, " ");
+  s = s.replace(/\$[^$\n]*\$/g, " ");
+  s = s.split(/\sX\s|×|✘|→|->/)[0];
+  s = s.split(/应为|正确答案|正确[:：]|因数拆错|配方公式|用错|故x=|故 x=/)[0];
+  s = s.replace(/\s+/g, " ").trim();
+  const numbered = s.match(/^(\d+\s*[.、．]\s*.{0,120}?=\s*0)/);
+  if (numbered) s = numbered[1].trim();
+  if (!s || s.length < 2) return "看图作答";
+  return s;
+}
+
 function renderQuiz() {
   const it = quizQueue[quizIndex];
   if (!it) {
@@ -384,8 +397,7 @@ function renderQuiz() {
     <article class="card quiz-card">
       <p class="meta">${quizIndex + 1} / ${quizQueue.length} · ${escapeHtml(it.subject || "未分类")} · ${escapeHtml(it.knowledge || "")}</p>
       ${it.imageFile ? `<img class="quiz-img" src="${imgUrl(it.imageFile)}" alt="题目图片" />` : ""}
-      <h2>${escapeHtml(it.stem || "看图作答")}</h2>
-      ${(it.options || []).map((o) => `<p>${escapeHtml(o)}</p>`).join("")}
+      <h2>${escapeHtml(practiceStem(it))}</h2>
       <p class="hint">先自己做，再揭晓。</p>
       <div id="answerBox" class="hidden-answer" ${revealed ? "" : "hidden"}>
         <p><b>正确答案：</b>${escapeHtml(it.correctAnswer || "（未填写）")}</p>
