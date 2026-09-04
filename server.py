@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import bank
+import ocr
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT", "8765"))
@@ -148,6 +149,27 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/notebooks":
             nb = bank.create_notebook()
             self._json(200, {"ok": True, "id": nb})
+            return
+        if path == "/api/ocr":
+            if not ocr.configured():
+                self._json(503, {"ok": False, "error": "未配置腾讯云 OCR。请在服务器写入密钥后重启服务。"})
+                return
+            data_url = payload.get("imageData") or ""
+            raw, _ext = decode_data_url(data_url)
+            if not raw:
+                self._json(400, {"ok": False, "error": "没有图片"})
+                return
+            if len(raw) > MAX_IMAGE:
+                self._json(400, {"ok": False, "error": "图片太大"})
+                return
+            import base64 as b64mod
+            image_b64 = b64mod.b64encode(raw).decode("ascii")
+            try:
+                fields = ocr.recognize_image_b64(image_b64)
+            except Exception as exc:
+                self._json(502, {"ok": False, "error": "识别失败：%s" % exc})
+                return
+            self._json(200, {"ok": True, "fields": fields})
             return
         parsed_nb = parse_notebook_api(path)
         if not parsed_nb:

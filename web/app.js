@@ -150,6 +150,134 @@ function renderList() {
 $("#filterSubject").addEventListener("input", renderList);
 $("#search").addEventListener("input", renderList);
 
+function showSaveOk(text) {
+  const ok = $("#form").querySelector(".save-ok");
+  ok.hidden = false;
+  ok.textContent = text;
+}
+
+function compressFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const max = 1600;
+      let w = img.width;
+      let h = img.height;
+      if (Math.max(w, h) > max) {
+        const scale = max / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("无法读取图片"));
+    };
+    img.src = url;
+  });
+}
+
+async function saveItem(extra) {
+  const fd = new FormData($("#form"));
+  const options = String(fd.get("options") || "")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const tags = String(fd.get("tags") || "")
+    .split(/[,，]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const stem = String((extra && extra.stem) || fd.get("stem") || "").trim();
+  const payload = {
+    subject: (extra && extra.subject) || fd.get("subject"),
+    source: fd.get("source"),
+    stem: stem || "看图",
+    options,
+    correctAnswer: (extra && extra.correctAnswer) || fd.get("correctAnswer"),
+    userWrongAnswer: (extra && extra.userWrongAnswer) || fd.get("userWrongAnswer"),
+    knowledge: fd.get("knowledge"),
+    explanation: (extra && extra.explanation) || fd.get("explanation"),
+    tags,
+    imageData: extra && extra.imageData != null ? extra.imageData : imageData,
+  };
+  if (!payload.imageData && payload.stem === "看图") {
+    throw new Error("请先拍照或选一张图片");
+  }
+  const res = await fetch(api("/items"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "保存失败");
+  if (payload.imageData) {
+    preview.src = payload.imageData;
+    preview.hidden = false;
+  }
+  video.hidden = true;
+  renderStats(data.stats);
+  return data;
+}
+
+function fillFormFromOcr(fields) {
+  if (!fields) return;
+  const set = (name, value) => {
+    if (!value) return;
+    const el = $(`[name="${name}"]`);
+    if (el) el.value = value;
+  };
+  set("stem", fields.stem);
+  set("subject", fields.subject);
+  set("correctAnswer", fields.correctAnswer);
+  set("userWrongAnswer", fields.userWrongAnswer);
+  set("explanation", fields.explanation);
+}
+
+async function recognizePhoto(dataUrl) {
+  const res = await fetch("/api/ocr", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageData: dataUrl }),
+  });
+  return res.json();
+}
+
+async function ingestPhotoFile(file, autoSave) {
+  imageData = await compressFile(file);
+  preview.src = imageData;
+  preview.hidden = false;
+  video.hidden = true;
+  if (!autoSave) return;
+  showSaveOk("照片已选中，正在保存…");
+  let extra = { imageData, stem: "看图" };
+  try {
+    const ocr = await recognizePhoto(imageData);
+    if (ocr.ok && ocr.fields) {
+      fillFormFromOcr(ocr.fields);
+      extra = {
+        imageData,
+        stem: ocr.fields.stem || "看图",
+        subject: ocr.fields.subject,
+        correctAnswer: ocr.fields.correctAnswer,
+        userWrongAnswer: ocr.fields.userWrongAnswer,
+        explanation: ocr.fields.explanation,
+      };
+    } else {
+      showSaveOk(ocr.error || "识别失败，已按图片入库。可稍后补文字。");
+    }
+  } catch (err) {
+    showSaveOk("识别暂时不可用，已按图片入库。");
+  }
+  await saveItem(extra);
+  showSaveOk("已入库。识别结果在下方表单，可改完再到题库核对。");
+}
+
 async function startCamera() {
   if (stream) return;
   stream = await navigator.mediaDevices.getUserMedia({
@@ -161,15 +289,25 @@ async function startCamera() {
   preview.hidden = true;
 }
 
+if (!window.isSecureContext) {
+  $$(".live-cam").forEach((el) => {
+    el.hidden = true;
+  });
+}
+
+$("#btnPhotoIn").addEventListener("click", () => {
+  $("#file").click();
+});
+
 $("#btnStart").addEventListener("click", () => {
-  startCamera().catch(() => alert("无法打开摄像头，请改用上传照片。"));
+  startCamera().catch(() => $("#file").click());
 });
 
 $("#btnSnap").addEventListener("click", async () => {
   try {
     if (!stream) await startCamera();
   } catch (e) {
-    alert("无法打开摄像头，请改用上传照片。");
+    $("#file").click();
     return;
   }
   canvas.width = video.videoWidth || 1280;
@@ -179,62 +317,45 @@ $("#btnSnap").addEventListener("click", async () => {
   preview.src = imageData;
   preview.hidden = false;
   video.hidden = true;
+  try {
+    await saveItem({ imageData, stem: "看图" });
+    showSaveOk("已拍照入库。到「题库」可看到这张图，练习时看图作答。");
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
-$("#file").addEventListener("change", (ev) => {
+$("#file").addEventListener("change", async (ev) => {
   const file = ev.target.files[0];
+  ev.target.value = "";
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    imageData = String(reader.result);
-    preview.src = imageData;
-    preview.hidden = false;
-    video.hidden = true;
-  };
-  reader.readAsDataURL(file);
+  try {
+    await ingestPhotoFile(file, true);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$("#fileAlbum").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  try {
+    await ingestPhotoFile(file, true);
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 $("#form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const fd = new FormData(ev.target);
-  const options = String(fd.get("options") || "")
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  const tags = String(fd.get("tags") || "")
-    .split(/[,，]/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-  const payload = {
-    subject: fd.get("subject"),
-    source: fd.get("source"),
-    stem: fd.get("stem"),
-    options,
-    correctAnswer: fd.get("correctAnswer"),
-    userWrongAnswer: fd.get("userWrongAnswer"),
-    knowledge: fd.get("knowledge"),
-    explanation: fd.get("explanation"),
-    tags,
-    imageData,
-  };
-  const res = await fetch(api("/items"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    alert(data.error || "保存失败");
-    return;
+  try {
+    await saveItem();
+    ev.target.reset();
+    showSaveOk("已放入错题库，可到「题库」查看或「练习」开始。");
+  } catch (err) {
+    alert(err.message);
   }
-  ev.target.reset();
-  imageData = "";
-  preview.hidden = true;
-  video.hidden = false;
-  renderStats(data.stats);
-  const ok = ev.target.querySelector(".save-ok");
-  ok.hidden = false;
-  ok.textContent = "已放入错题库，可到「题库」查看或「练习」开始。";
 });
 
 $("#btnQuiz").addEventListener("click", async () => {
