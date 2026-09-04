@@ -249,7 +249,7 @@ function fillFormFromOcr(fields) {
   set("subject", fields.subject);
   set("correctAnswer", fields.correctAnswer);
   set("userWrongAnswer", fields.userWrongAnswer);
-  set("explanation", fields.explanation);
+  set("explanation", flattenBrokenText(fields.explanation));
 }
 
 async function recognizePhoto(dataUrl) {
@@ -424,9 +424,9 @@ function renderQuiz() {
       <h2>${escapeHtml(practiceStem(it))}</h2>
       <p class="hint">先自己做，再揭晓。</p>
       <div id="answerBox" class="hidden-answer" ${revealed ? "" : "hidden"}>
-        <p><b>正确答案：</b>${escapeHtml(it.correctAnswer || "（未填写）")}</p>
-        <p><b>当时错选：</b>${escapeHtml(it.userWrongAnswer || "（未填写）")}</p>
-        <p><b>解析：</b>${escapeHtml(it.explanation || "（未填写）")}</p>
+        <p><b>正确答案：</b>${escapeHtml(flattenBrokenText(it.correctAnswer) || "（未填写）")}</p>
+        <p><b>当时错选：</b>${escapeHtml(flattenBrokenText(it.userWrongAnswer) || "（未填写）")}</p>
+        <p class="explain"><b>解析：</b>${escapeHtml(flattenBrokenText(it.explanation) || "（未填写）")}</p>
       </div>
       <div class="camera-actions">
         <button type="button" class="ghost" id="btnReveal">看答案</button>
@@ -453,6 +453,18 @@ async function submitReview(result) {
   quizIndex += 1;
   revealed = false;
   renderQuiz();
+}
+
+function flattenBrokenText(s) {
+  const raw = String(s ?? "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return "";
+  const lines = raw.split("\n").map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) return raw.replace(/\s+/g, " ").trim();
+  const short = lines.filter((x) => x.length <= 2).length;
+  const joined = lines.length >= 4 && short >= lines.length * 0.45
+    ? lines.join("")
+    : lines.join(" ");
+  return joined.replace(/\s+/g, " ").trim();
 }
 
 function escapeHtml(s) {

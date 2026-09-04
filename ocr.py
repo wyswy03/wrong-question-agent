@@ -48,6 +48,35 @@ def _recognize_with(action: str, image_b64: str) -> list[str]:
     return _lines_from_resp(resp)
 
 
+def glue_short_lines(lines):
+    glued = []
+    buf = []
+    for line in lines or []:
+        t = (line or "").strip()
+        if not t:
+            continue
+        if len(t) <= 2:
+            buf.append(t)
+            continue
+        if buf:
+            glued.append("".join(buf))
+            buf = []
+        glued.append(t)
+    if buf:
+        glued.append("".join(buf))
+    return glued
+
+
+def as_paragraph(text):
+    raw = (text or "").replace("\r\n", "\n").strip()
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    short = sum(1 for ln in lines if len(ln) <= 2)
+    joined = "".join(lines) if (len(lines) >= 4 and short >= len(lines) * 0.45) else " ".join(lines)
+    return re.sub(r"\s+", " ", joined).strip()
+
+
 def question_only(text):
     s = (text or '').strip()
     s = re.sub(r'\$\$[\s\S]*?\$\$', ' ', s)
@@ -62,6 +91,7 @@ def question_only(text):
 
 
 def parse_fields(lines: list[str]) -> dict:
+    lines = glue_short_lines(lines)
     text = "\n".join(lines)
     stem = question_only(text) or text.strip()
     correct = ""
@@ -78,7 +108,7 @@ def parse_fields(lines: list[str]) -> dict:
         m = re.search(r"(?:应为|正确答案|正确)\s*[:：]?\s*(.+)$", line)
         if m and not correct:
             correct = m.group(1).strip()
-        if "配方" in line or "用错" in line or "解析" in line:
+        if "配方" in line or "用错" in line or "解析" in line or "顶点" in line:
             explanation = (explanation + " " + line).strip()
         if re.search(r"顶点\s*\(", line) and "应为" not in line and not wrong:
             wrong = line
@@ -87,7 +117,7 @@ def parse_fields(lines: list[str]) -> dict:
         "subject": subject,
         "correctAnswer": correct,
         "userWrongAnswer": wrong,
-        "explanation": explanation,
+        "explanation": as_paragraph(explanation),
         "text": text,
     }
 

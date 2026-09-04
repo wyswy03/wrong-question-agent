@@ -158,8 +158,13 @@ input, textarea {
   border-radius: 12px;
   padding: 12px;
   margin: 12px 0;
-  white-space: pre-wrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.65;
 }
+.hidden-answer p { margin: 0.45em 0; }
+.hidden-answer .explain { white-space: normal; }
 .ok { color: var(--ok); }
 .bad { color: var(--accent); }
 
