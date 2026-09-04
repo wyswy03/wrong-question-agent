@@ -410,6 +410,27 @@ function practiceStem(item) {
   return s;
 }
 
+function prettyMath(s) {
+  return String(s || "").replace(/([a-zA-Z])(\d+)\b/g, (_, letter, digits) => {
+    const sup = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+    return letter + [...digits].map((d) => sup[Number(d)] || d).join("");
+  });
+}
+
+function answerParts(item) {
+  const correct = flattenBrokenText(item.correctAnswer);
+  const wrong = flattenBrokenText(item.userWrongAnswer);
+  let expl = flattenBrokenText(item.explanation);
+  const full = flattenBrokenText(item.stem);
+  const q = practiceStem(item);
+  if (!expl && full && q && full.length > q.length + 2) {
+    const i = full.indexOf(q);
+    expl = flattenBrokenText(i >= 0 ? full.slice(i + q.length) : full);
+    expl = expl.replace(/^\s*X\s*/i, "").trim();
+  }
+  return { correct, wrong, expl };
+}
+
 function renderQuiz() {
   const it = quizQueue[quizIndex];
   if (!it) {
@@ -417,28 +438,37 @@ function renderQuiz() {
     loadBank();
     return;
   }
+  const stem = prettyMath(practiceStem(it));
+  const showPhoto = Boolean(it.imageFile) && (revealed || stem === "看图作答");
+  const ans = answerParts(it);
+  const answerHtml = revealed ? `
+      <div id="answerBox" class="hidden-answer">
+        ${ans.correct ? `<p><b>正确答案：</b>${escapeHtml(prettyMath(ans.correct))}</p>` : ""}
+        ${ans.wrong ? `<p><b>当时错选：</b>${escapeHtml(prettyMath(ans.wrong))}</p>` : ""}
+        ${ans.expl ? `<p class="explain"><b>解析：</b>${escapeHtml(prettyMath(ans.expl))}</p>` : ""}
+        ${!ans.correct && !ans.wrong && !ans.expl ? `<p>这张原图里有批改，请对照图片。</p>` : ""}
+      </div>` : "";
   quizEl.innerHTML = `
     <article class="card quiz-card">
       <p class="meta">${quizIndex + 1} / ${quizQueue.length} · ${escapeHtml(it.subject || "未分类")} · ${escapeHtml(it.knowledge || "")}</p>
-      ${it.imageFile ? `<img class="quiz-img" src="${imgUrl(it.imageFile)}" alt="题目图片" />` : ""}
-      <h2>${escapeHtml(practiceStem(it))}</h2>
-      <p class="hint">先自己做，再揭晓。</p>
-      <div id="answerBox" class="hidden-answer" ${revealed ? "" : "hidden"}>
-        <p><b>正确答案：</b>${escapeHtml(flattenBrokenText(it.correctAnswer) || "（未填写）")}</p>
-        <p><b>当时错选：</b>${escapeHtml(flattenBrokenText(it.userWrongAnswer) || "（未填写）")}</p>
-        <p class="explain"><b>解析：</b>${escapeHtml(flattenBrokenText(it.explanation) || "（未填写）")}</p>
-      </div>
+      ${showPhoto ? `<img class="quiz-img" src="${imgUrl(it.imageFile)}" alt="题目图片" />` : ""}
+      <h2>${escapeHtml(stem)}</h2>
+      <p class="hint">${revealed ? "对照答案后，点「做对了」或「还是错」。" : "先自己做，再点「看答案」。原图有批改，揭晓前不显示，以免看到答案。"}</p>
+      ${answerHtml}
       <div class="camera-actions">
-        <button type="button" class="ghost" id="btnReveal">看答案</button>
+        ${revealed ? "" : `<button type="button" class="ghost" id="btnReveal">看答案</button>`}
         <button type="button" class="primary" id="btnRight">做对了</button>
         <button type="button" class="ghost" id="btnWrong">还是错</button>
       </div>
     </article>
   `;
-  $("#btnReveal").addEventListener("click", () => {
-    revealed = true;
-    $("#answerBox").hidden = false;
-  });
+  const revealBtn = $("#btnReveal");
+  if (revealBtn) {
+    revealBtn.addEventListener("click", () => {
+      revealed = true;
+      renderQuiz();
+    });
+  }
   $("#btnRight").addEventListener("click", () => submitReview("correct"));
   $("#btnWrong").addEventListener("click", () => submitReview("wrong"));
 }
