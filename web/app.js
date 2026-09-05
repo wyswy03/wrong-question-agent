@@ -460,9 +460,9 @@ $("#btnSnap").addEventListener("click", async () => {
 });
 
 $("#file").addEventListener("change", async (ev) => {
-  const files = ev.target.files;
+  const files = [...(ev.target.files || [])];
   ev.target.value = "";
-  if (!files || !files.length) return;
+  if (!files.length) return;
   try {
     await ingestPhotoFiles(files);
   } catch (err) {
@@ -471,9 +471,9 @@ $("#file").addEventListener("change", async (ev) => {
 });
 
 $("#fileAlbum").addEventListener("change", async (ev) => {
-  const files = ev.target.files;
+  const files = [...(ev.target.files || [])];
   ev.target.value = "";
-  if (!files || !files.length) return;
+  if (!files.length) return;
   try {
     await ingestPhotoFiles(files);
   } catch (err) {

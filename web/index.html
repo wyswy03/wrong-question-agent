@@ -50,7 +50,7 @@
             var input = document.getElementById(id);
             if (!input) return;
             input.addEventListener("change", function () {
-              var n = input.files && input.files.length;
+              var n = input.files ? input.files.length : 0;
               var el = document.getElementById("ingestStatus");
               if (el && n) el.textContent = "已选中 " + n + " 张图，开始识别…";
             });
@@ -113,6 +113,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=14"></script>
+  <script src="/app.js?v=15"></script>
 </body>
 </html>
