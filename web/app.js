@@ -456,6 +456,41 @@ $("#fileAlbum").addEventListener("change", async (ev) => {
   }
 });
 
+document.addEventListener("paste", async (ev) => {
+  const files = [...(ev.clipboardData && ev.clipboardData.files ? ev.clipboardData.files : [])]
+    .filter((f) => f && String(f.type || "").startsWith("image/"));
+  if (!files.length) return;
+  ev.preventDefault();
+  showSaveOk("已粘贴图片，开始识别…");
+  try {
+    await ingestPhotoFiles(files);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+const dropCard = $(".camera-card");
+if (dropCard) {
+  dropCard.addEventListener("dragover", (ev) => {
+    ev.preventDefault();
+  });
+  dropCard.addEventListener("drop", async (ev) => {
+    ev.preventDefault();
+    const files = [...(ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files : [])]
+      .filter((f) => f && String(f.type || "").startsWith("image/"));
+    if (!files.length) {
+      showSaveOk("拖进来的不是图片。");
+      return;
+    }
+    showSaveOk("已拖入图片，开始识别…");
+    try {
+      await ingestPhotoFiles(files);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
+
 $("#form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
