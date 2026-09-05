@@ -35,12 +35,12 @@
         <div class="camera-actions">
           <button type="button" id="btnStart" class="ghost live-cam">打开摄像头预览</button>
           <button type="button" id="btnSnap" class="ghost live-cam">从预览截图</button>
-          <label class="ghost file-btn">从相册选图
-            <input id="fileAlbum" type="file" accept="image/*" hidden />
+          <label class="ghost file-btn">从相册选图（可多选）
+            <input id="fileAlbum" type="file" accept="image/*" multiple hidden />
           </label>
         </div>
         <input id="file" type="file" accept="image/*" capture="environment" hidden />
-        <p class="hint">拍到题目即可，不一定是错题。会先识别题干，再自动生成答案和解析。</p>
+        <p class="hint">一张图里有 1. 2. 3. 会拆成多道题。相册可一次选多张。拍到题目即可，不必是错题。</p>
       </div>
 
       <form id="form" class="card form">
@@ -96,6 +96,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>

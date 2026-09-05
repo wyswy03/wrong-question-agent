@@ -263,46 +263,66 @@ async function recognizePhoto(dataUrl) {
 }
 
 async function ingestPhotoFile(file, autoSave) {
-  if (ingestBusy) return;
-  ingestBusy = true;
-  lastSavedId = "";
-  try {
   imageData = await compressFile(file);
   preview.src = imageData;
   preview.hidden = false;
   video.hidden = true;
-  if (!autoSave) return;
+  if (!autoSave) return 0;
   showSaveOk("正在识别题目并生成解析…");
-  let extra = { imageData, stem: "看图" };
+  let extras = [{ imageData, stem: "看图" }];
   let afterMsg = "";
   try {
     const ocr = await recognizePhoto(imageData);
-    if (ocr.ok && ocr.fields) {
-      fillFormFromOcr(ocr.fields);
-      extra = {
+    const list = (ocr.items && ocr.items.length) ? ocr.items : (ocr.ok && ocr.fields ? [ocr.fields] : []);
+    if (ocr.ok && list.length) {
+      extras = list.map((fields) => ({
         imageData,
-        stem: ocr.fields.stem || "看图",
-        subject: ocr.fields.subject,
-        correctAnswer: ocr.fields.correctAnswer,
-        userWrongAnswer: ocr.fields.userWrongAnswer,
-        knowledge: ocr.fields.knowledge,
-        explanation: ocr.fields.explanation,
-      };
-      if (ocr.fields.solveError) {
-        afterMsg = "已入库。解析生成失败：" + ocr.fields.solveError;
-      } else if (extra.explanation || extra.correctAnswer) {
-        afterMsg = "已入库，解析已生成。不是错题也可以。改文字请点「更新本题」。";
+        stem: fields.stem || "看图",
+        subject: fields.subject,
+        correctAnswer: fields.correctAnswer,
+        userWrongAnswer: fields.userWrongAnswer,
+        knowledge: fields.knowledge,
+        explanation: fields.explanation,
+      }));
+      fillFormFromOcr(list[list.length - 1]);
+      if (list[0].solveError) {
+        afterMsg = "已入库。解析生成失败：" + list[0].solveError;
+      } else if (extras.some((x) => x.explanation || x.correctAnswer)) {
+        afterMsg = list.length > 1
+          ? `这张图拆成 ${list.length} 道题并已入库。可在「题库」查看。`
+          : "已入库，解析已生成。不是错题也可以。改文字请点「更新本题」。";
       } else {
-        afterMsg = "已入库。解析未生成时，可在下方自己补，或开通腾讯混元后再拍。";
+        afterMsg = list.length > 1
+          ? `这张图拆成 ${list.length} 道题并已入库。解析可稍后补。`
+          : "已入库。解析未生成时，可在下方自己补，或开通腾讯混元后再拍。";
       }
     } else {
-      afterMsg = ocr.error || "识别失败，已按图片入库。可稍后补文字。";
+      afterMsg = (ocr && ocr.error) || "识别失败，已按图片入库。可稍后补文字。";
     }
   } catch (err) {
     afterMsg = "识别暂时不可用，已按图片入库。";
   }
-  await saveItem(extra);
+  for (const extra of extras) {
+    lastSavedId = "";
+    await saveItem(extra);
+  }
   showSaveOk(afterMsg);
+  return extras.length;
+}
+
+async function ingestPhotoFiles(fileList) {
+  const files = [...fileList].filter(Boolean);
+  if (!files.length || ingestBusy) return;
+  ingestBusy = true;
+  try {
+    let total = 0;
+    for (let i = 0; i < files.length; i += 1) {
+      showSaveOk(`正在处理第 ${i + 1}/${files.length} 张照片…`);
+      total += await ingestPhotoFile(files[i], true) || 0;
+    }
+    if (files.length > 1) {
+      showSaveOk(`已处理 ${files.length} 张照片，共入库 ${total} 道题。`);
+    }
   } finally {
     ingestBusy = false;
   }
@@ -357,22 +377,22 @@ $("#btnSnap").addEventListener("click", async () => {
 });
 
 $("#file").addEventListener("change", async (ev) => {
-  const file = ev.target.files[0];
+  const files = ev.target.files;
   ev.target.value = "";
-  if (!file) return;
+  if (!files || !files.length) return;
   try {
-    await ingestPhotoFile(file, true);
+    await ingestPhotoFiles(files);
   } catch (err) {
     alert(err.message);
   }
 });
 
 $("#fileAlbum").addEventListener("change", async (ev) => {
-  const file = ev.target.files[0];
+  const files = ev.target.files;
   ev.target.value = "";
-  if (!file) return;
+  if (!files || !files.length) return;
   try {
-    await ingestPhotoFile(file, true);
+    await ingestPhotoFiles(files);
   } catch (err) {
     alert(err.message);
   }

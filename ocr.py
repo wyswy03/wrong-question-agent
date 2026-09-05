@@ -90,6 +90,34 @@ def question_only(text):
     return s
 
 
+
+def split_questions(text):
+    raw = (text or "").replace("\r\n", "\n").strip()
+    if not raw:
+        return []
+    patterns = [
+        r"(?:(?<=^)|(?<=\n)|(?<=[；;。]))\s*(?:\d{1,2}[.、．]|[（(]\d{1,2}[）)]|[一二三四五六七八九十][.、．])\s+",
+        r"(?:(?<=^)|(?<=\s))(\d{1,2})[.、．]\s+",
+    ]
+    matches = []
+    for pat in patterns:
+        found = list(re.finditer(pat, raw))
+        if len(found) >= 2:
+            matches = found
+            break
+    if len(matches) < 2:
+        one = question_only(raw) or raw
+        return [one] if one.strip() else []
+    chunks = []
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
+        chunk = raw[m.start():end].strip()
+        stem = question_only(chunk) or chunk
+        if len(stem) >= 2:
+            chunks.append(stem)
+    return chunks or [question_only(raw) or raw]
+
+
 def parse_fields(lines: list[str]) -> dict:
     lines = glue_short_lines(lines)
     text = "\n".join(lines)
@@ -112,13 +140,17 @@ def parse_fields(lines: list[str]) -> dict:
             explanation = (explanation + " " + line).strip()
         if re.search(r"顶点\s*\(", line) and "应为" not in line and not wrong:
             wrong = line
+    items = split_questions(text)
+    if not items:
+        items = [stem] if stem else []
     return {
-        "stem": stem,
+        "stem": items[0] if items else stem,
         "subject": subject,
         "correctAnswer": correct,
         "userWrongAnswer": wrong,
         "explanation": as_paragraph(explanation),
         "text": text,
+        "items": items,
     }
 
 

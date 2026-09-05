@@ -169,25 +169,38 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json(502, {"ok": False, "error": "识别失败：%s" % exc})
                 return
+            items_out = []
             try:
                 import solve
-                if solve.configured() and (fields.get("stem") or fields.get("text")):
-                    extra = solve.explain_question(fields.get("stem") or "", fields.get("text") or "")
-                    if extra.get("stem") and (not fields.get("stem") or fields.get("stem") in ("看图", "看图作答")):
-                        fields["stem"] = extra["stem"]
-                    if extra.get("subject") and not fields.get("subject"):
-                        fields["subject"] = extra["subject"]
-                    if extra.get("knowledge"):
-                        fields["knowledge"] = extra["knowledge"]
-                    if extra.get("correctAnswer"):
-                        fields["correctAnswer"] = extra["correctAnswer"]
-                    if extra.get("explanation"):
-                        fields["explanation"] = extra["explanation"]
-                    fields["solved"] = bool(extra.get("explanation") or extra.get("correctAnswer"))
+                stems = [x for x in (fields.get("items") or []) if str(x).strip()]
+                if not stems:
+                    stems = [fields.get("stem") or fields.get("text") or ""]
+                stems = stems[:8]
+                for stem in stems:
+                    item = dict(fields)
+                    item["stem"] = stem
+                    if solve.configured() and stem:
+                        extra = solve.explain_question(stem, fields.get("text") or "")
+                        if extra.get("stem"):
+                            item["stem"] = extra["stem"]
+                        if extra.get("subject"):
+                            item["subject"] = extra["subject"]
+                        if extra.get("knowledge"):
+                            item["knowledge"] = extra["knowledge"]
+                        if extra.get("correctAnswer"):
+                            item["correctAnswer"] = extra["correctAnswer"]
+                        if extra.get("explanation"):
+                            item["explanation"] = extra["explanation"]
+                        item["solved"] = bool(extra.get("explanation") or extra.get("correctAnswer"))
+                    items_out.append(item)
+                if items_out:
+                    fields = items_out[0]
+                    fields["items"] = [it.get("stem") for it in items_out]
             except Exception as exc:
                 fields["solved"] = False
                 fields["solveError"] = str(exc)
-            self._json(200, {"ok": True, "fields": fields})
+                items_out = [fields]
+            self._json(200, {"ok": True, "fields": fields, "items": items_out or [fields]})
             return
         parsed_nb = parse_notebook_api(path)
         if not parsed_nb:
