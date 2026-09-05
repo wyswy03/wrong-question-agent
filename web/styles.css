@@ -125,6 +125,8 @@ input, textarea {
   background: #fff;
 }
 .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.status { color: var(--accent); font-size: 15px; font-weight: 600; margin: 12px 0 0; }
+.file-visible { display: block; width: 100%; margin-top: 6px; padding: 8px; background: #fff; }
 .row { margin-top: 0; }
 
 .item {
