@@ -42,8 +42,23 @@
         <label class="hint">或用手机拍照
           <input id="file" class="file-visible" type="file" accept="image/*" capture="environment" />
         </label>
-        <p class="status" id="ingestStatus">还没选图。也可把图片拖到这张卡片上，或按 Ctrl+V 粘贴。</p>
+        <p class="status" id="ingestStatus">还没选图。点下面的「选择文件」，或把图片拖进来，或按 Ctrl+V。</p>
       </div>
+      <script>
+        (function () {
+          function hook(id) {
+            var input = document.getElementById(id);
+            if (!input) return;
+            input.addEventListener("change", function () {
+              var n = input.files && input.files.length;
+              var el = document.getElementById("ingestStatus");
+              if (el && n) el.textContent = "已选中 " + n + " 张图，开始识别…";
+            });
+          }
+          hook("file");
+          hook("fileAlbum");
+        })();
+      </script>
 
       <form id="form" class="card form">
         <label>学科（拍照后也可再补）
@@ -98,6 +113,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=13"></script>
+  <script src="/app.js?v=14"></script>
 </body>
 </html>

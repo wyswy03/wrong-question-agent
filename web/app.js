@@ -182,28 +182,48 @@ async function fetchJson(url, options, timeoutMs) {
   }
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读图失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function compressFile(file) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const max = 1600;
-      let w = img.width;
-      let h = img.height;
-      if (Math.max(w, h) > max) {
-        const scale = max / Math.max(w, h);
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
-      }
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    const img = new Image();
+    const timer = setTimeout(() => {
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
+      fileToDataUrl(file).then(resolve, reject);
+    }, 6000);
+    const done = (fn) => {
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      fn();
+    };
+    img.onload = () => {
+      try {
+        const max = 1600;
+        let w = img.width;
+        let h = img.height;
+        if (Math.max(w, h) > max) {
+          const scale = max / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        done(() => resolve(canvas.toDataURL("image/jpeg", 0.82)));
+      } catch (err) {
+        done(() => fileToDataUrl(file).then(resolve, reject));
+      }
     };
     img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("无法读取图片"));
+      done(() => fileToDataUrl(file).then(resolve, reject));
     };
     img.src = url;
   });
@@ -365,6 +385,7 @@ async function ingestPhotoFile(file, autoSave) {
 async function ingestPhotoFiles(fileList) {
   const files = [...fileList].filter(Boolean);
   if (!files.length) return;
+  showSaveOk("已选中 " + files.length + " 张图，开始识别…");
   if (ingestBusy) {
     showSaveOk("上一张还在处理，请稍等再选图。");
     return;
@@ -402,9 +423,13 @@ if (!window.isSecureContext) {
 }
 
 $("#btnPhotoIn").addEventListener("click", () => {
-  const mobile = /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-  if (mobile) $("#file").click();
-  else $("#fileAlbum").click();
+  showSaveOk("请在弹出的窗口里选图片；选完后这行字会变成「已选中」。");
+  const picker = $("#fileAlbum") || $("#file");
+  if (!picker) {
+    alert("页面缺少选图框，请强制刷新（Ctrl+F5）后再试。");
+    return;
+  }
+  picker.click();
 });
 
 $("#btnStart").addEventListener("click", () => {
