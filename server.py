@@ -169,38 +169,30 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json(502, {"ok": False, "error": "识别失败：%s" % exc})
                 return
+            stems = [x for x in (fields.get("items") or []) if str(x).strip()]
+            if not stems:
+                stems = [fields.get("stem") or fields.get("text") or "看图"]
+            stems = stems[:8]
             items_out = []
+            for stem in stems:
+                item = dict(fields)
+                item["stem"] = stem
+                items_out.append(item)
+            fields["items"] = stems
+            self._json(200, {"ok": True, "fields": fields, "items": items_out})
+            return
+        if path == "/api/solve":
+            stem = (payload.get("stem") or "").strip()
+            text = payload.get("text") or ""
             try:
                 import solve
-                stems = [x for x in (fields.get("items") or []) if str(x).strip()]
-                if not stems:
-                    stems = [fields.get("stem") or fields.get("text") or ""]
-                stems = stems[:8]
-                for stem in stems:
-                    item = dict(fields)
-                    item["stem"] = stem
-                    if solve.configured() and stem:
-                        extra = solve.explain_question(stem, fields.get("text") or "")
-                        if extra.get("stem"):
-                            item["stem"] = extra["stem"]
-                        if extra.get("subject"):
-                            item["subject"] = extra["subject"]
-                        if extra.get("knowledge"):
-                            item["knowledge"] = extra["knowledge"]
-                        if extra.get("correctAnswer"):
-                            item["correctAnswer"] = extra["correctAnswer"]
-                        if extra.get("explanation"):
-                            item["explanation"] = extra["explanation"]
-                        item["solved"] = bool(extra.get("explanation") or extra.get("correctAnswer"))
-                    items_out.append(item)
-                if items_out:
-                    fields = items_out[0]
-                    fields["items"] = [it.get("stem") for it in items_out]
+                if not solve.configured():
+                    self._json(503, {"ok": False, "error": "未配置混元/大模型，题目已能入库，解析需开通后才会自动生成"})
+                    return
+                extra = solve.explain_question(stem, text)
+                self._json(200, {"ok": True, "fields": extra})
             except Exception as exc:
-                fields["solved"] = False
-                fields["solveError"] = str(exc)
-                items_out = [fields]
-            self._json(200, {"ok": True, "fields": fields, "items": items_out or [fields]})
+                self._json(502, {"ok": False, "error": "解析失败：%s" % exc})
             return
         parsed_nb = parse_notebook_api(path)
         if not parsed_nb:

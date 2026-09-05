@@ -40,7 +40,8 @@
           </label>
         </div>
         <input id="file" type="file" accept="image/*" capture="environment" hidden />
-        <p class="hint">一张图里有 1. 2. 3. 会拆成多道题。相册可一次选多张。拍到题目即可，不必是错题。</p>
+        <p class="hint" id="ingestStatus">选图或拍照后，这里会显示识别进度。</p>
+        <p class="hint">一张图里有 1. 2. 3. 会拆成多道题。请用「从相册选图」。拍到题目即可，不必是错题。</p>
       </div>
 
       <form id="form" class="card form">
@@ -96,6 +97,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

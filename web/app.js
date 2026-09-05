@@ -153,9 +153,33 @@ $("#filterSubject").addEventListener("input", renderList);
 $("#search").addEventListener("input", renderList);
 
 function showSaveOk(text) {
+  const top = $("#ingestStatus");
+  if (top) {
+    top.hidden = false;
+    top.textContent = text;
+  }
   const ok = $("#form").querySelector(".save-ok");
-  ok.hidden = false;
-  ok.textContent = text;
+  if (ok) {
+    ok.hidden = false;
+    ok.textContent = text;
+  }
+}
+
+async function fetchJson(url, options, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs || 60000);
+  try {
+    const res = await fetch(url, Object.assign({}, options, { signal: ctrl.signal }));
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      throw new Error("请求超时，请换一张更清晰的图再试");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function compressFile(file) {
@@ -254,12 +278,23 @@ function fillFormFromOcr(fields) {
 }
 
 async function recognizePhoto(dataUrl) {
-  const res = await fetch("/api/ocr", {
+  return fetchJson("/api/ocr", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ imageData: dataUrl }),
-  });
-  return res.json();
+  }, 60000);
+}
+
+async function solveFields(fields) {
+  const res = await fetchJson("/api/solve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stem: fields.stem || "", text: fields.text || fields.stem || "" }),
+  }, 50000);
+  if (res && res.ok && res.fields) {
+    return Object.assign({}, fields, res.fields, { solved: true });
+  }
+  return Object.assign({}, fields, { solveError: (res && res.error) || "解析未生成" });
 }
 
 async function ingestPhotoFile(file, autoSave) {
@@ -268,7 +303,7 @@ async function ingestPhotoFile(file, autoSave) {
   preview.hidden = false;
   video.hidden = true;
   if (!autoSave) return 0;
-  showSaveOk("正在识别题目并生成解析…");
+  showSaveOk("正在识别题目（先出题，再生成解析）…");
   let extras = [{ imageData, stem: "看图" }];
   let afterMsg = "";
   try {
@@ -283,6 +318,7 @@ async function ingestPhotoFile(file, autoSave) {
         userWrongAnswer: fields.userWrongAnswer,
         knowledge: fields.knowledge,
         explanation: fields.explanation,
+        text: fields.text,
       }));
       fillFormFromOcr(list[list.length - 1]);
       if (list[0].solveError) {
@@ -300,19 +336,39 @@ async function ingestPhotoFile(file, autoSave) {
       afterMsg = (ocr && ocr.error) || "识别失败，已按图片入库。可稍后补文字。";
     }
   } catch (err) {
-    afterMsg = "识别暂时不可用，已按图片入库。";
+    afterMsg = (err && err.message) || "识别失败，请换一张图再试。";
   }
+  let saved = 0;
   for (const extra of extras) {
     lastSavedId = "";
-    await saveItem(extra);
+    const savedData = await saveItem(extra);
+    saved += 1;
+    const itemId = savedData && savedData.item && savedData.item.id;
+    showSaveOk(`第 ${saved} 题已入库，正在生成解析…`);
+    try {
+      const solved = await solveFields(extra);
+      if (itemId && (solved.explanation || solved.correctAnswer)) {
+        lastSavedId = itemId;
+        await saveItem(Object.assign({}, extra, solved, { updateExisting: true }));
+        fillFormFromOcr(solved);
+      } else if (solved.solveError) {
+        afterMsg = afterMsg || solved.solveError;
+      }
+    } catch (err) {
+      afterMsg = afterMsg || ((err && err.message) || "解析超时，题目已保存");
+    }
   }
-  showSaveOk(afterMsg);
-  return extras.length;
+  showSaveOk(afterMsg || `已入库 ${saved} 道题。`);
+  return saved;
 }
 
 async function ingestPhotoFiles(fileList) {
   const files = [...fileList].filter(Boolean);
-  if (!files.length || ingestBusy) return;
+  if (!files.length) return;
+  if (ingestBusy) {
+    showSaveOk("上一张还在处理，请稍等再选图。");
+    return;
+  }
   ingestBusy = true;
   try {
     let total = 0;
@@ -346,7 +402,9 @@ if (!window.isSecureContext) {
 }
 
 $("#btnPhotoIn").addEventListener("click", () => {
-  $("#file").click();
+  const mobile = /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
+  if (mobile) $("#file").click();
+  else $("#fileAlbum").click();
 });
 
 $("#btnStart").addEventListener("click", () => {
