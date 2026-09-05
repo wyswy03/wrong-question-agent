@@ -204,7 +204,7 @@ async function saveItem(extra) {
     options,
     correctAnswer: (extra && extra.correctAnswer) || fd.get("correctAnswer"),
     userWrongAnswer: (extra && extra.userWrongAnswer) || fd.get("userWrongAnswer"),
-    knowledge: fd.get("knowledge"),
+    knowledge: (extra && extra.knowledge) || fd.get("knowledge"),
     explanation: (extra && extra.explanation) || fd.get("explanation"),
     tags,
     imageData: extra && extra.imageData != null ? extra.imageData : imageData,
@@ -229,7 +229,7 @@ async function saveItem(extra) {
   video.hidden = true;
   renderStats(data.stats);
   if (data.item && data.item.id) lastSavedId = data.item.id;
-  setSubmitLabel(lastSavedId ? "更新本题" : "放入错题库");
+  setSubmitLabel(lastSavedId ? "更新本题" : "保存题目");
   return data;
 }
 
@@ -249,6 +249,7 @@ function fillFormFromOcr(fields) {
   set("subject", fields.subject);
   set("correctAnswer", fields.correctAnswer);
   set("userWrongAnswer", fields.userWrongAnswer);
+  set("knowledge", fields.knowledge);
   set("explanation", flattenBrokenText(fields.explanation));
 }
 
@@ -271,8 +272,9 @@ async function ingestPhotoFile(file, autoSave) {
   preview.hidden = false;
   video.hidden = true;
   if (!autoSave) return;
-  showSaveOk("照片已选中，正在保存…");
+  showSaveOk("正在识别题目并生成解析…");
   let extra = { imageData, stem: "看图" };
+  let afterMsg = "";
   try {
     const ocr = await recognizePhoto(imageData);
     if (ocr.ok && ocr.fields) {
@@ -283,16 +285,24 @@ async function ingestPhotoFile(file, autoSave) {
         subject: ocr.fields.subject,
         correctAnswer: ocr.fields.correctAnswer,
         userWrongAnswer: ocr.fields.userWrongAnswer,
+        knowledge: ocr.fields.knowledge,
         explanation: ocr.fields.explanation,
       };
+      if (ocr.fields.solveError) {
+        afterMsg = "已入库。解析生成失败：" + ocr.fields.solveError;
+      } else if (extra.explanation || extra.correctAnswer) {
+        afterMsg = "已入库，解析已生成。不是错题也可以。改文字请点「更新本题」。";
+      } else {
+        afterMsg = "已入库。解析未生成时，可在下方自己补，或开通腾讯混元后再拍。";
+      }
     } else {
-      showSaveOk(ocr.error || "识别失败，已按图片入库。可稍后补文字。");
+      afterMsg = ocr.error || "识别失败，已按图片入库。可稍后补文字。";
     }
   } catch (err) {
-    showSaveOk("识别暂时不可用，已按图片入库。");
+    afterMsg = "识别暂时不可用，已按图片入库。";
   }
   await saveItem(extra);
-  showSaveOk("已入库（只需这一次）。下面表单改完请点「更新本题」，不会再多出一条。");
+  showSaveOk(afterMsg);
   } finally {
     ingestBusy = false;
   }

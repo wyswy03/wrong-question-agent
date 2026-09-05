@@ -169,6 +169,24 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json(502, {"ok": False, "error": "识别失败：%s" % exc})
                 return
+            try:
+                import solve
+                if solve.configured() and (fields.get("stem") or fields.get("text")):
+                    extra = solve.explain_question(fields.get("stem") or "", fields.get("text") or "")
+                    if extra.get("stem") and (not fields.get("stem") or fields.get("stem") in ("看图", "看图作答")):
+                        fields["stem"] = extra["stem"]
+                    if extra.get("subject") and not fields.get("subject"):
+                        fields["subject"] = extra["subject"]
+                    if extra.get("knowledge"):
+                        fields["knowledge"] = extra["knowledge"]
+                    if extra.get("correctAnswer"):
+                        fields["correctAnswer"] = extra["correctAnswer"]
+                    if extra.get("explanation"):
+                        fields["explanation"] = extra["explanation"]
+                    fields["solved"] = bool(extra.get("explanation") or extra.get("correctAnswer"))
+            except Exception as exc:
+                fields["solved"] = False
+                fields["solveError"] = str(exc)
             self._json(200, {"ok": True, "fields": fields})
             return
         parsed_nb = parse_notebook_api(path)

@@ -1,1 +1,2 @@
 tencentcloud-sdk-python-ocr>=3.0.1400
+tencentcloud-sdk-python-hunyuan>=3.0.1400
